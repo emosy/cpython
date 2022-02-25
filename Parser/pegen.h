@@ -112,6 +112,7 @@ typedef struct {
 } StarEtc;
 
 typedef struct { operator_ty kind; } AugOperator;
+typedef struct { assignop_ty kind; } AssignOperator;
 typedef struct {
     void *element;
     int is_keyword;

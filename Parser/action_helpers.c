@@ -760,6 +760,19 @@ _PyPegen_augoperator(Parser *p, operator_ty kind)
     return a;
 }
 
+/* Encapsulates the value of an operator_ty into an AugOperator struct */
+AssignOperator *
+_PyPegen_assignoperator(Parser *p, assignop_ty kind)
+{
+    AssignOperator *a = _PyArena_Malloc(p->arena, sizeof(AssignOperator));
+    if (!a) {
+        return NULL;
+    }
+    a->kind = kind;
+    return a;
+}
+
+
 /* Construct a FunctionDef equivalent to function_def, but with decorators */
 stmt_ty
 _PyPegen_function_def_decorators(Parser *p, asdl_expr_seq *decorators, stmt_ty function_def)
