@@ -762,7 +762,7 @@ _PyPegen_augoperator(Parser *p, operator_ty kind)
 
 /* Encapsulates the value of an operator_ty into an AugOperator struct */
 AssignOperator *
-_PyPegen_assignoperator(Parser *p, assignop_ty kind)
+_PyPegen_assignoperator(Parser *p, unaryassignop_ty kind)
 {
     AssignOperator *a = _PyArena_Malloc(p->arena, sizeof(AssignOperator));
     if (!a) {

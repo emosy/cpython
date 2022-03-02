@@ -24,6 +24,7 @@ module Python
 
           | Delete(expr* targets)
           | Assign(expr* targets, expr value, string? type_comment)
+          | UnaryAssign(expr target, operator op)
           | AugAssign(expr target, operator op, expr value)
           -- 'simple' indicates that we annotate simple name without parens
           | AnnAssign(expr target, expr annotation, expr? value, int simple)
@@ -101,6 +102,8 @@ module Python
                  | RShift | BitOr | BitXor | BitAnd | FloorDiv
 
     unaryop = Invert | Not | UAdd | USub
+
+    unaryassignop = Increment | Decrement
 
     cmpop = Eq | NotEq | Lt | LtE | Gt | GtE | Is | IsNot | In | NotIn
 

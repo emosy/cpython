@@ -54,6 +54,8 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->Compare_type);
     Py_CLEAR(state->Constant_type);
     Py_CLEAR(state->Continue_type);
+    Py_CLEAR(state->Decrement_singleton);
+    Py_CLEAR(state->Decrement_type);
     Py_CLEAR(state->Del_singleton);
     Py_CLEAR(state->Del_type);
     Py_CLEAR(state->Delete_type);
@@ -84,6 +86,8 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->Import_type);
     Py_CLEAR(state->In_singleton);
     Py_CLEAR(state->In_type);
+    Py_CLEAR(state->Increment_singleton);
+    Py_CLEAR(state->Increment_type);
     Py_CLEAR(state->Interactive_type);
     Py_CLEAR(state->Invert_singleton);
     Py_CLEAR(state->Invert_type);
@@ -154,6 +158,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->UAdd_type);
     Py_CLEAR(state->USub_singleton);
     Py_CLEAR(state->USub_type);
+    Py_CLEAR(state->UnaryAssign_type);
     Py_CLEAR(state->UnaryOp_type);
     Py_CLEAR(state->While_type);
     Py_CLEAR(state->With_type);
@@ -255,6 +260,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->type_comment);
     Py_CLEAR(state->type_ignore_type);
     Py_CLEAR(state->type_ignores);
+    Py_CLEAR(state->unaryassignop_type);
     Py_CLEAR(state->unaryop_type);
     Py_CLEAR(state->upper);
     Py_CLEAR(state->value);
@@ -427,6 +433,10 @@ static const char * const Assign_fields[]={
     "targets",
     "value",
     "type_comment",
+};
+static const char * const UnaryAssign_fields[]={
+    "target",
+    "op",
 };
 static const char * const AugAssign_fields[]={
     "target",
@@ -637,6 +647,8 @@ static PyObject* ast2obj_expr_context(struct ast_state *state, expr_context_ty);
 static PyObject* ast2obj_boolop(struct ast_state *state, boolop_ty);
 static PyObject* ast2obj_operator(struct ast_state *state, operator_ty);
 static PyObject* ast2obj_unaryop(struct ast_state *state, unaryop_ty);
+static PyObject* ast2obj_unaryassignop(struct ast_state *state,
+                                       unaryassignop_ty);
 static PyObject* ast2obj_cmpop(struct ast_state *state, cmpop_ty);
 static PyObject* ast2obj_comprehension(struct ast_state *state, void*);
 static const char * const comprehension_fields[]={
@@ -1135,6 +1147,7 @@ init_types(struct ast_state *state)
         "     | Return(expr? value)\n"
         "     | Delete(expr* targets)\n"
         "     | Assign(expr* targets, expr value, string? type_comment)\n"
+        "     | UnaryAssign(expr target, operator op)\n"
         "     | AugAssign(expr target, operator op, expr value)\n"
         "     | AnnAssign(expr target, expr annotation, expr? value, int simple)\n"
         "     | For(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)\n"
@@ -1205,6 +1218,10 @@ init_types(struct ast_state *state)
     if (PyObject_SetAttr(state->Assign_type, state->type_comment, Py_None) ==
         -1)
         return 0;
+    state->UnaryAssign_type = make_type(state, "UnaryAssign", state->stmt_type,
+                                        UnaryAssign_fields, 2,
+        "UnaryAssign(expr target, operator op)");
+    if (!state->UnaryAssign_type) return 0;
     state->AugAssign_type = make_type(state, "AugAssign", state->stmt_type,
                                       AugAssign_fields, 3,
         "AugAssign(expr target, operator op, expr value)");
@@ -1629,6 +1646,27 @@ init_types(struct ast_state *state)
     state->USub_singleton = PyType_GenericNew((PyTypeObject *)state->USub_type,
                                               NULL, NULL);
     if (!state->USub_singleton) return 0;
+    state->unaryassignop_type = make_type(state, "unaryassignop",
+                                          state->AST_type, NULL, 0,
+        "unaryassignop = Increment | Decrement");
+    if (!state->unaryassignop_type) return 0;
+    if (!add_attributes(state, state->unaryassignop_type, NULL, 0)) return 0;
+    state->Increment_type = make_type(state, "Increment",
+                                      state->unaryassignop_type, NULL, 0,
+        "Increment");
+    if (!state->Increment_type) return 0;
+    state->Increment_singleton = PyType_GenericNew((PyTypeObject
+                                                   *)state->Increment_type,
+                                                   NULL, NULL);
+    if (!state->Increment_singleton) return 0;
+    state->Decrement_type = make_type(state, "Decrement",
+                                      state->unaryassignop_type, NULL, 0,
+        "Decrement");
+    if (!state->Decrement_type) return 0;
+    state->Decrement_singleton = PyType_GenericNew((PyTypeObject
+                                                   *)state->Decrement_type,
+                                                   NULL, NULL);
+    if (!state->Decrement_singleton) return 0;
     state->cmpop_type = make_type(state, "cmpop", state->AST_type, NULL, 0,
         "cmpop = Eq | NotEq | Lt | LtE | Gt | GtE | Is | IsNot | In | NotIn");
     if (!state->cmpop_type) return 0;
@@ -1868,6 +1906,8 @@ static int obj2ast_operator(struct ast_state *state, PyObject* obj,
                             operator_ty* out, PyArena* arena);
 static int obj2ast_unaryop(struct ast_state *state, PyObject* obj, unaryop_ty*
                            out, PyArena* arena);
+static int obj2ast_unaryassignop(struct ast_state *state, PyObject* obj,
+                                 unaryassignop_ty* out, PyArena* arena);
 static int obj2ast_cmpop(struct ast_state *state, PyObject* obj, cmpop_ty* out,
                          PyArena* arena);
 static int obj2ast_comprehension(struct ast_state *state, PyObject* obj,
@@ -2100,6 +2140,34 @@ _PyAST_Assign(asdl_expr_seq * targets, expr_ty value, string type_comment, int
     p->v.Assign.targets = targets;
     p->v.Assign.value = value;
     p->v.Assign.type_comment = type_comment;
+    p->lineno = lineno;
+    p->col_offset = col_offset;
+    p->end_lineno = end_lineno;
+    p->end_col_offset = end_col_offset;
+    return p;
+}
+
+stmt_ty
+_PyAST_UnaryAssign(expr_ty target, operator_ty op, int lineno, int col_offset,
+                   int end_lineno, int end_col_offset, PyArena *arena)
+{
+    stmt_ty p;
+    if (!target) {
+        PyErr_SetString(PyExc_ValueError,
+                        "field 'target' is required for UnaryAssign");
+        return NULL;
+    }
+    if (!op) {
+        PyErr_SetString(PyExc_ValueError,
+                        "field 'op' is required for UnaryAssign");
+        return NULL;
+    }
+    p = (stmt_ty)_PyArena_Malloc(arena, sizeof(*p));
+    if (!p)
+        return NULL;
+    p->kind = UnaryAssign_kind;
+    p->v.UnaryAssign.target = target;
+    p->v.UnaryAssign.op = op;
     p->lineno = lineno;
     p->col_offset = col_offset;
     p->end_lineno = end_lineno;
@@ -3832,6 +3900,21 @@ ast2obj_stmt(struct ast_state *state, void* _o)
             goto failed;
         Py_DECREF(value);
         break;
+    case UnaryAssign_kind:
+        tp = (PyTypeObject *)state->UnaryAssign_type;
+        result = PyType_GenericNew(tp, NULL, NULL);
+        if (!result) goto failed;
+        value = ast2obj_expr(state, o->v.UnaryAssign.target);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->target, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        value = ast2obj_operator(state, o->v.UnaryAssign.op);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->op, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        break;
     case AugAssign_kind:
         tp = (PyTypeObject *)state->AugAssign_type;
         result = PyType_GenericNew(tp, NULL, NULL);
@@ -4794,6 +4877,18 @@ PyObject* ast2obj_unaryop(struct ast_state *state, unaryop_ty o)
         case USub:
             Py_INCREF(state->USub_singleton);
             return state->USub_singleton;
+    }
+    Py_UNREACHABLE();
+}
+PyObject* ast2obj_unaryassignop(struct ast_state *state, unaryassignop_ty o)
+{
+    switch(o) {
+        case Increment:
+            Py_INCREF(state->Increment_singleton);
+            return state->Increment_singleton;
+        case Decrement:
+            Py_INCREF(state->Decrement_singleton);
+            return state->Decrement_singleton;
     }
     Py_UNREACHABLE();
 }
@@ -6394,6 +6489,54 @@ obj2ast_stmt(struct ast_state *state, PyObject* obj, stmt_ty* out, PyArena*
         }
         *out = _PyAST_Assign(targets, value, type_comment, lineno, col_offset,
                              end_lineno, end_col_offset, arena);
+        if (*out == NULL) goto failed;
+        return 0;
+    }
+    tp = state->UnaryAssign_type;
+    isinstance = PyObject_IsInstance(obj, tp);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        expr_ty target;
+        operator_ty op;
+
+        if (_PyObject_LookupAttr(obj, state->target, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"target\" missing from UnaryAssign");
+            return 1;
+        }
+        else {
+            int res;
+            if (Py_EnterRecursiveCall(" while traversing 'UnaryAssign' node")) {
+                goto failed;
+            }
+            res = obj2ast_expr(state, tmp, &target, arena);
+            Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        if (_PyObject_LookupAttr(obj, state->op, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"op\" missing from UnaryAssign");
+            return 1;
+        }
+        else {
+            int res;
+            if (Py_EnterRecursiveCall(" while traversing 'UnaryAssign' node")) {
+                goto failed;
+            }
+            res = obj2ast_operator(state, tmp, &op, arena);
+            Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_UnaryAssign(target, op, lineno, col_offset, end_lineno,
+                                  end_col_offset, arena);
         if (*out == NULL) goto failed;
         return 0;
     }
@@ -10039,6 +10182,33 @@ obj2ast_unaryop(struct ast_state *state, PyObject* obj, unaryop_ty* out,
 }
 
 int
+obj2ast_unaryassignop(struct ast_state *state, PyObject* obj, unaryassignop_ty*
+                      out, PyArena* arena)
+{
+    int isinstance;
+
+    isinstance = PyObject_IsInstance(obj, state->Increment_type);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        *out = Increment;
+        return 0;
+    }
+    isinstance = PyObject_IsInstance(obj, state->Decrement_type);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        *out = Decrement;
+        return 0;
+    }
+
+    PyErr_Format(PyExc_TypeError, "expected some sort of unaryassignop, but got %R", obj);
+    return 1;
+}
+
+int
 obj2ast_cmpop(struct ast_state *state, PyObject* obj, cmpop_ty* out, PyArena*
               arena)
 {
@@ -11877,6 +12047,9 @@ astmodule_exec(PyObject *m)
     if (PyModule_AddObjectRef(m, "Assign", state->Assign_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "UnaryAssign", state->UnaryAssign_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "AugAssign", state->AugAssign_type) < 0) {
         return -1;
     }
@@ -12103,6 +12276,16 @@ astmodule_exec(PyObject *m)
         return -1;
     }
     if (PyModule_AddObjectRef(m, "USub", state->USub_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "unaryassignop", state->unaryassignop_type) <
+        0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "Increment", state->Increment_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "Decrement", state->Decrement_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "cmpop", state->cmpop_type) < 0) {

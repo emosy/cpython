@@ -26,9 +26,9 @@ typedef enum _operator { Add=1, Sub=2, Mult=3, MatMult=4, Div=5, Mod=6, Pow=7,
                          LShift=8, RShift=9, BitOr=10, BitXor=11, BitAnd=12,
                          FloorDiv=13 } operator_ty;
 
-typedef enum _assignop { InplaceAdd=1, InplaceSub=2 } assignop_ty;
-
 typedef enum _unaryop { Invert=1, Not=2, UAdd=3, USub=4 } unaryop_ty;
+
+typedef enum _unaryassignop { Increment=1, Decrement=2 } unaryassignop_ty;
 
 typedef enum _cmpop { Eq=1, NotEq=2, Lt=3, LtE=4, Gt=5, GtE=6, Is=7, IsNot=8,
                       In=9, NotIn=10 } cmpop_ty;
@@ -178,12 +178,13 @@ struct _mod {
 
 enum _stmt_kind {FunctionDef_kind=1, AsyncFunctionDef_kind=2, ClassDef_kind=3,
                   Return_kind=4, Delete_kind=5, Assign_kind=6,
-                  AugAssign_kind=7, AnnAssign_kind=8, For_kind=9,
-                  AsyncFor_kind=10, While_kind=11, If_kind=12, With_kind=13,
-                  AsyncWith_kind=14, Match_kind=15, Raise_kind=16, Try_kind=17,
-                  TryStar_kind=18, Assert_kind=19, Import_kind=20,
-                  ImportFrom_kind=21, Global_kind=22, Nonlocal_kind=23,
-                  Expr_kind=24, Pass_kind=25, Break_kind=26, Continue_kind=27};
+                  UnaryAssign_kind=7, AugAssign_kind=8, AnnAssign_kind=9,
+                  For_kind=10, AsyncFor_kind=11, While_kind=12, If_kind=13,
+                  With_kind=14, AsyncWith_kind=15, Match_kind=16,
+                  Raise_kind=17, Try_kind=18, TryStar_kind=19, Assert_kind=20,
+                  Import_kind=21, ImportFrom_kind=22, Global_kind=23,
+                  Nonlocal_kind=24, Expr_kind=25, Pass_kind=26, Break_kind=27,
+                  Continue_kind=28};
 struct _stmt {
     enum _stmt_kind kind;
     union {
@@ -226,6 +227,11 @@ struct _stmt {
             expr_ty value;
             string type_comment;
         } Assign;
+
+        struct {
+            expr_ty target;
+            operator_ty op;
+        } UnaryAssign;
 
         struct {
             expr_ty target;
@@ -662,6 +668,9 @@ stmt_ty _PyAST_Delete(asdl_expr_seq * targets, int lineno, int col_offset, int
 stmt_ty _PyAST_Assign(asdl_expr_seq * targets, expr_ty value, string
                       type_comment, int lineno, int col_offset, int end_lineno,
                       int end_col_offset, PyArena *arena);
+stmt_ty _PyAST_UnaryAssign(expr_ty target, operator_ty op, int lineno, int
+                           col_offset, int end_lineno, int end_col_offset,
+                           PyArena *arena);
 stmt_ty _PyAST_AugAssign(expr_ty target, operator_ty op, expr_ty value, int
                          lineno, int col_offset, int end_lineno, int
                          end_col_offset, PyArena *arena);
