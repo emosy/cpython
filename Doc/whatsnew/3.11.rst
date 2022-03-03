@@ -404,6 +404,11 @@ Optimizations
   larger *k*).
   (Contributed by Serhiy Storchaka in :issue:`37295`.)
 
+* Dict don't store hash value when all inserted keys are Unicode objects.
+  This reduces dict size. For example, ``sys.getsizeof(dict.fromkeys("abcdefg"))``
+  becomes 272 bytes from 352 bytes on 64bit platform.
+  (Contributed by Inada Naoki in :issue:`46845`.)
+
 
 CPython bytecode changes
 ========================
@@ -573,6 +578,12 @@ Removed
 * Remove ``__class_getitem__`` method from :class:`pathlib.PurePath`,
   because it was not used and added by mistake in previous versions.
   (Contributed by Nikita Sobolev in :issue:`46483`.)
+
+* Remove the undocumented private ``float.__set_format__()`` method, previously
+  known as ``float.__setformat__()`` in Python 3.7. Its docstring said: "You
+  probably don't want to use this function. It exists mainly to be used in
+  Python's test suite."
+  (Contributed by Victor Stinner in :issue:`46852`.)
 
 Porting to Python 3.11
 ======================

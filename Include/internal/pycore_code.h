@@ -27,11 +27,6 @@ typedef struct {
 } _PyAttrCache;
 
 typedef struct {
-    uint32_t module_keys_version;
-    uint32_t builtin_keys_version;
-} _PyLoadGlobalCache;
-
-typedef struct {
     /* Borrowed ref in LOAD_METHOD */
     PyObject *obj;
 } _PyObjectCache;
@@ -57,19 +52,54 @@ typedef union {
     _PyEntryZero zero;
     _PyAdaptiveEntry adaptive;
     _PyAttrCache attr;
-    _PyLoadGlobalCache load_global;
     _PyObjectCache obj;
     _PyCallCache call;
 } SpecializedCacheEntry;
 
 #define INSTRUCTIONS_PER_ENTRY (sizeof(SpecializedCacheEntry)/sizeof(_Py_CODEUNIT))
 
+/* Inline caches */
+
+#define CACHE_ENTRIES(cache) (sizeof(cache)/sizeof(_Py_CODEUNIT))
+
+typedef struct {
+    _Py_CODEUNIT counter;
+    _Py_CODEUNIT index;
+    _Py_CODEUNIT module_keys_version;
+    _Py_CODEUNIT _m1;
+    _Py_CODEUNIT builtin_keys_version;
+} _PyLoadGlobalCache;
+
+#define INLINE_CACHE_ENTRIES_LOAD_GLOBAL CACHE_ENTRIES(_PyLoadGlobalCache)
+
 typedef struct {
     _Py_CODEUNIT counter;
 } _PyBinaryOpCache;
 
-#define INLINE_CACHE_ENTRIES_BINARY_OP \
-    (sizeof(_PyBinaryOpCache) / sizeof(_Py_CODEUNIT))
+#define INLINE_CACHE_ENTRIES_BINARY_OP CACHE_ENTRIES(_PyBinaryOpCache)
+
+typedef struct {
+    _Py_CODEUNIT counter;
+} _PyUnpackSequenceCache;
+
+#define INLINE_CACHE_ENTRIES_UNPACK_SEQUENCE \
+    CACHE_ENTRIES(_PyUnpackSequenceCache)
+
+typedef struct {
+    _Py_CODEUNIT counter;
+    _Py_CODEUNIT mask;
+} _PyCompareOpCache;
+
+#define INLINE_CACHE_ENTRIES_COMPARE_OP CACHE_ENTRIES(_PyCompareOpCache)
+
+typedef struct {
+    _Py_CODEUNIT counter;
+    _Py_CODEUNIT type_version;
+    _Py_CODEUNIT _t1;
+    _Py_CODEUNIT func_version;
+} _PyBinarySubscrCache;
+
+#define INLINE_CACHE_ENTRIES_BINARY_SUBSCR CACHE_ENTRIES(_PyBinarySubscrCache)
 
 /* Maximum size of code to quicken, in code units. */
 #define MAX_SIZE_TO_QUICKEN 5000
@@ -300,24 +330,25 @@ cache_backoff(_PyAdaptiveEntry *entry) {
 
 extern int _Py_Specialize_LoadAttr(PyObject *owner, _Py_CODEUNIT *instr, PyObject *name, SpecializedCacheEntry *cache);
 extern int _Py_Specialize_StoreAttr(PyObject *owner, _Py_CODEUNIT *instr, PyObject *name, SpecializedCacheEntry *cache);
-extern int _Py_Specialize_LoadGlobal(PyObject *globals, PyObject *builtins, _Py_CODEUNIT *instr, PyObject *name, SpecializedCacheEntry *cache);
+extern int _Py_Specialize_LoadGlobal(PyObject *globals, PyObject *builtins, _Py_CODEUNIT *instr, PyObject *name);
 extern int _Py_Specialize_LoadMethod(PyObject *owner, _Py_CODEUNIT *instr, PyObject *name, SpecializedCacheEntry *cache);
-extern int _Py_Specialize_BinarySubscr(PyObject *sub, PyObject *container, _Py_CODEUNIT *instr, SpecializedCacheEntry *cache);
+extern int _Py_Specialize_BinarySubscr(PyObject *sub, PyObject *container, _Py_CODEUNIT *instr);
 extern int _Py_Specialize_StoreSubscr(PyObject *container, PyObject *sub, _Py_CODEUNIT *instr);
 extern int _Py_Specialize_Call(PyObject *callable, _Py_CODEUNIT *instr, int nargs,
     PyObject *kwnames, SpecializedCacheEntry *cache);
 extern int _Py_Specialize_Precall(PyObject *callable, _Py_CODEUNIT *instr, int nargs,
     PyObject *kwnames, SpecializedCacheEntry *cache, PyObject *builtins);
 extern void _Py_Specialize_BinaryOp(PyObject *lhs, PyObject *rhs, _Py_CODEUNIT *instr,
-                             int oparg);
-extern void _Py_Specialize_CompareOp(PyObject *lhs, PyObject *rhs, _Py_CODEUNIT *instr, SpecializedCacheEntry *cache);
+                                    int oparg);
+extern void _Py_Specialize_CompareOp(PyObject *lhs, PyObject *rhs,
+                                     _Py_CODEUNIT *instr, int oparg);
 extern void _Py_Specialize_UnpackSequence(PyObject *seq, _Py_CODEUNIT *instr,
-                                   SpecializedCacheEntry *cache);
+                                          int oparg);
 
 /* Deallocator function for static codeobjects used in deepfreeze.py */
 extern void _PyStaticCode_Dealloc(PyCodeObject *co);
 /* Function to intern strings of codeobjects */
-extern void _PyStaticCode_InternStrings(PyCodeObject *co);
+extern int _PyStaticCode_InternStrings(PyCodeObject *co);
 
 #ifdef Py_STATS
 
@@ -381,6 +412,38 @@ extern PyObject* _Py_GetSpecializationStats(void);
 #define OBJECT_STAT_INC(name) ((void)0)
 #endif
 
+// Cache values are only valid in memory, so use native endianness.
+#ifdef WORDS_BIGENDIAN
+
+static inline void
+write32(uint16_t *p, uint32_t val)
+{
+    p[0] = val >> 16;
+    p[1] = (uint16_t)val;
+}
+
+static inline uint32_t
+read32(uint16_t *p)
+{
+    return (p[0] << 16) | p[1];
+}
+
+#else
+
+static inline void
+write32(uint16_t *p, uint32_t val)
+{
+    p[0] = (uint16_t)val;
+    p[1] = val >> 16;
+}
+
+static inline uint32_t
+read32(uint16_t *p)
+{
+    return p[0] | (p[1] << 16);
+}
+
+#endif
 
 #ifdef __cplusplus
 }
