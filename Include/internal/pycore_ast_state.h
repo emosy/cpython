@@ -40,8 +40,6 @@ struct ast_state {
     PyObject *Compare_type;
     PyObject *Constant_type;
     PyObject *Continue_type;
-    PyObject *Decrement_singleton;
-    PyObject *Decrement_type;
     PyObject *Del_singleton;
     PyObject *Del_type;
     PyObject *Delete_type;
@@ -72,8 +70,6 @@ struct ast_state {
     PyObject *Import_type;
     PyObject *In_singleton;
     PyObject *In_type;
-    PyObject *Increment_singleton;
-    PyObject *Increment_type;
     PyObject *Interactive_type;
     PyObject *Invert_singleton;
     PyObject *Invert_type;
@@ -144,7 +140,6 @@ struct ast_state {
     PyObject *UAdd_type;
     PyObject *USub_singleton;
     PyObject *USub_type;
-    PyObject *UnaryAssign_type;
     PyObject *UnaryOp_type;
     PyObject *While_type;
     PyObject *With_type;
@@ -246,7 +241,6 @@ struct ast_state {
     PyObject *type_comment;
     PyObject *type_ignore_type;
     PyObject *type_ignores;
-    PyObject *unaryassignop_type;
     PyObject *unaryop_type;
     PyObject *upper;
     PyObject *value;
