@@ -1606,6 +1606,9 @@ def write_source(mod, metadata, f, internal_h_file):
     v.visit(mod)
 
 def main(input_filename, c_filename, h_filename, internal_h_filename, dump_module=False):
+
+    print("Parsing %s" % input_filename)
+
     auto_gen_msg = AUTOGEN_MESSAGE.format("/".join(Path(__file__).parts[-2:]))
     mod = asdl.parse(input_filename)
     if dump_module:
