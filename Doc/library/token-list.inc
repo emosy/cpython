@@ -201,6 +201,14 @@
 
    Token value for ``":="``.
 
+.. data:: INCREMENT
+
+   Token value for ``"++"``.
+
+.. data:: DECREMENT
+
+   Token value for ``"--"``.
+
 .. data:: OP
 
 .. data:: AWAIT
