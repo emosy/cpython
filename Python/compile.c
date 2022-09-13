@@ -35,6 +35,9 @@
 #include "opcode.h"               // EXTENDED_ARG
 
 
+#include <execinfo.h>
+
+
 #define DEFAULT_BLOCK_SIZE 16
 #define DEFAULT_CODE_SIZE 128
 #define DEFAULT_LNOTAB_SIZE 16
@@ -342,6 +345,7 @@ static PyCodeObject *compiler_mod(struct compiler *, mod_ty);
 static int compiler_visit_stmt(struct compiler *, stmt_ty);
 static int compiler_visit_keyword(struct compiler *, keyword_ty);
 static int compiler_visit_expr(struct compiler *, expr_ty);
+static int compiler_unaryassign(struct compiler *, stmt_ty);
 static int compiler_augassign(struct compiler *, stmt_ty);
 static int compiler_annassign(struct compiler *, stmt_ty);
 static int compiler_subscript(struct compiler *, expr_ty);
@@ -879,6 +883,7 @@ compiler_next_instr(basicblock *b)
 static int
 stack_effect(int opcode, int oparg, int jump)
 {
+    printf("opcode: %d, oparg: %d, jump: %d\n", opcode, oparg, jump);
     switch (opcode) {
         case NOP:
         case EXTENDED_ARG:
@@ -1117,6 +1122,7 @@ stack_effect(int opcode, int oparg, int jump)
         case BINARY_OP:
             return -1;
         default:
+            printf("Unknown opcode: %d\n", opcode);
             return PY_INVALID_STACK_EFFECT;
     }
     return PY_INVALID_STACK_EFFECT; /* not reachable */
@@ -3955,6 +3961,8 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
                   (expr_ty)asdl_seq_GET(s->v.Assign.targets, i));
         }
         break;
+    case UnaryAssign_kind:
+        return compiler_unaryassign(c, s);
     case AugAssign_kind:
         return compiler_augassign(c, s);
     case AnnAssign_kind:
@@ -4037,6 +4045,8 @@ static int
 addop_binary(struct compiler *c, operator_ty binop, bool inplace)
 {
     int oparg;
+    printf("addop_binary\n");
+    printf("binop: %d\n", binop);
     switch (binop) {
         case Add:
             oparg = inplace ? NB_INPLACE_ADD : NB_ADD;
@@ -4080,6 +4090,37 @@ addop_binary(struct compiler *c, operator_ty binop, bool inplace)
         default:
             PyErr_Format(PyExc_SystemError, "%s op %d should not be possible",
                          inplace ? "inplace" : "binary", binop);
+            return 0;
+    }
+    ADDOP_I(c, BINARY_OP, oparg);
+    return 1;
+}
+
+static int
+addop_binary_unary(struct compiler *c, unaryassignop_ty binop)
+{
+    int oparg;
+    printf("addop_binary\n");
+    printf("binop: %d\n", binop);
+    switch (binop) {
+        case Increment:
+            //TODO: define what oparg should be here
+            // oparg = UNARY_INPLACE_PLUS;
+            oparg = NB_INCREMENT;
+            break;
+        case Decrement:
+            //TODO: same as above
+            oparg = NB_DECREMENT;
+            break;
+        // case Add:
+        //     oparg = inplace ? NB_INPLACE_ADD : NB_ADD;
+        //     break;
+        // case Sub:
+        //     oparg = inplace ? NB_INPLACE_SUBTRACT : NB_SUBTRACT;
+        //     break;
+        default:
+            PyErr_Format(PyExc_SystemError, "%s op %d should not be possible",
+                         "binary", binop);
             return 0;
     }
     ADDOP_I(c, BINARY_OP, oparg);
@@ -4175,6 +4216,8 @@ compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
         }
         break;
     case OP_NAME:
+        //print out the name
+        // printf("name: %s\n", PyUnicode_AsUTF8(name));
         switch (ctx) {
         case Load: op = LOAD_NAME; break;
         case Store: op = STORE_NAME; break;
@@ -4188,6 +4231,12 @@ compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
     Py_DECREF(mangled);
     if (arg < 0)
         return 0;
+    if (PyUnicode_AsUTF8(name)[0] == 'a') {
+        printf("compile.c line 4235\n");
+        printf("name: %s\n", PyUnicode_AsUTF8(name));
+        printf("arg: %ld\n", arg);
+        printf("op: %d\n", op);
+    }
     return compiler_addop_i(c, op, arg);
 }
 
@@ -5796,6 +5845,89 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
 }
 
 static int
+compiler_unaryassign(struct compiler *c, stmt_ty s)
+{
+
+    printf("compiler_unaryassign\n");
+    assert(s->kind == UnaryAssign_kind);
+    expr_ty e = s->v.UnaryAssign.target;
+
+    int old_lineno = c->u->u_lineno;
+    int old_end_lineno = c->u->u_end_lineno;
+    int old_col_offset = c->u->u_col_offset;
+    int old_end_col_offset = c->u->u_end_col_offset;
+    SET_LOC(c, e);
+
+    switch (e->kind) {
+    case Attribute_kind:
+        printf("Attribute_kind\n");
+        VISIT(c, expr, e->v.Attribute.value);
+        ADDOP_I(c, COPY, 1);
+        int old_lineno = c->u->u_lineno;
+        c->u->u_lineno = e->end_lineno;
+        ADDOP_NAME(c, LOAD_ATTR, e->v.Attribute.attr, names);
+        c->u->u_lineno = old_lineno;
+        break;
+    case Subscript_kind:
+        printf("Subscript_kind\n");
+        VISIT(c, expr, e->v.Subscript.value);
+        VISIT(c, expr, e->v.Subscript.slice);
+        ADDOP_I(c, COPY, 2);
+        ADDOP_I(c, COPY, 2);
+        ADDOP(c, BINARY_SUBSCR);
+        break;
+    case Name_kind:
+        printf("Name_kind\n");
+        if (!compiler_nameop(c, e->v.Name.id, Load))
+            return 0;
+        break;
+    default:
+        PyErr_Format(PyExc_SystemError,
+            "invalid node type (%d) for unary assignment",
+            e->kind);
+        return 0;
+    }
+
+    c->u->u_lineno = old_lineno;
+    c->u->u_end_lineno = old_end_lineno;
+    c->u->u_col_offset = old_col_offset;
+    c->u->u_end_col_offset = old_end_col_offset;
+
+
+    //TODO: determine what to actually visit here
+    // VISIT(c, expr, s->v.UnaryAssign.value);
+    // ADDOP_INPLACE(c, s->v.UnaryAssign.op);
+
+    RETURN_IF_FALSE(addop_binary_unary((c), (s->v.UnaryAssign.op)));
+    //TODO: figure out what add to use - maybe not inplace addop?
+
+    SET_LOC(c, e);
+
+    switch (e->kind) {
+    case Attribute_kind:
+        printf("Attribute_kind2\n");
+        c->u->u_lineno = e->end_lineno;
+        ADDOP_I(c, SWAP, 2);
+        ADDOP_NAME(c, STORE_ATTR, e->v.Attribute.attr, names);
+        break;
+    case Subscript_kind:
+        printf("Subscript_kind2\n");
+        ADDOP_I(c, SWAP, 3);
+        ADDOP_I(c, SWAP, 2);
+        ADDOP(c, STORE_SUBSCR);
+        break;
+    case Name_kind:
+        printf("Name_kind2\n");
+        return compiler_nameop(c, e->v.Name.id, Store);
+    default:
+        Py_UNREACHABLE();
+    }
+    return 1;
+}
+
+
+
+static int
 compiler_augassign(struct compiler *c, stmt_ty s)
 {
     assert(s->kind == AugAssign_kind);
@@ -7020,6 +7152,32 @@ stackdepth(struct compiler *c)
             if (new_depth > maxdepth) {
                 maxdepth = new_depth;
             }
+            if (depth < 0) {
+                printf("%d %d %d\n", depth, effect, new_depth);
+                //print out opcode and arg
+                printf("%d %d\n", instr->i_opcode, instr->i_oparg);
+
+
+                printf("oopsies gotta backtrace\n");
+                // backtrace();
+
+
+                // //print out a backtrace using execinfo
+                // void *array[50];
+                // char **strings;
+                // int size, i2;
+
+                // size = backtrace (array, 50);
+                // strings = backtrace_symbols (array, size);
+                // if (strings != NULL)
+                // {
+                //     printf ("Obtained %d stack frames.\n", size);
+                //     for (i2 = 0; i2 < size; i2++)
+                //         printf ("%s\n", strings[i2]);
+                // }
+
+                // free (strings);
+            }
             assert(depth >= 0); /* invalid code or bug in stackdepth() */
             if (is_jump(instr)) {
                 effect = stack_effect(instr->i_opcode, instr->i_oparg, 1);
@@ -7032,6 +7190,11 @@ stackdepth(struct compiler *c)
                 stackdepth_push(&sp, instr->i_target, target_depth);
             }
             depth = new_depth;
+            if (depth < 0) {
+                printf("%d %d %d\n", depth, effect, new_depth);
+                //print out opcode and arg
+                printf("%d %d\n", instr->i_opcode, instr->i_oparg);
+            }
             if (instr->i_opcode == JUMP_ABSOLUTE ||
                 instr->i_opcode == JUMP_NO_INTERRUPT ||
                 instr->i_opcode == JUMP_FORWARD ||
