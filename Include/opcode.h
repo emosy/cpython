@@ -239,6 +239,10 @@ static uint32_t _PyOpcode_Jump[8] = {
 #define NB_INPLACE_SUBTRACT              23
 #define NB_INPLACE_TRUE_DIVIDE           24
 #define NB_INPLACE_XOR                   25
+//new stuff for increment and decrement
+#define NB_INCREMENT                     26
+#define NB_DECREMENT                     27
+
 
 static const uint8_t _PyOpcode_InlineCacheEntries[256] = {
     [BINARY_OP] = 1,
