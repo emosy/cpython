@@ -1291,6 +1291,10 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
             VISIT(st, expr, s->v.AnnAssign.value);
         }
         break;
+    case UnaryAssign_kind:
+        printf("UnaryAssign\n");
+        VISIT(st, expr, s->v.UnaryAssign.target);
+        break;
     case AugAssign_kind:
         VISIT(st, expr, s->v.AugAssign.target);
         VISIT(st, expr, s->v.AugAssign.value);
