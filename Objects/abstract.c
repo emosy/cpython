@@ -1275,6 +1275,63 @@ PyNumber_InPlaceAdd(PyObject *v, PyObject *w)
 }
 
 PyObject *
+PyNumber_Increment(PyObject *v, PyObject *w)
+{
+    PyObject *result = BINARY_IOP1(v, w, NB_SLOT(nb_increment),
+                                   NB_SLOT(nb_increment), "++");
+
+    binary_iop1(v, w, __builtin_offsetof (PyNumberMethods, nb_inplace_add), __builtin_offsetof (PyNumberMethods, nb_add), "+=");
+
+
+    if (result == Py_NotImplemented) {
+        PySequenceMethods *m = Py_TYPE(v)->tp_as_sequence;
+        Py_DECREF(result);
+        if (m != NULL) {
+            binaryfunc func = m->sq_inplace_concat;
+            if (func == NULL)
+                func = m->sq_concat;
+            if (func != NULL) {
+                result = func(v, w);
+                assert(_Py_CheckSlotResult(v, "+=", result != NULL));
+                return result;
+            }
+        }
+        result = binop_type_error(v, w, "+=");
+    }
+    return result;
+}
+
+
+PyObject *
+PyNumber_Decrement(PyObject *v, PyObject *w)
+{
+    PyObject *result = BINARY_IOP1(v, w, NB_SLOT(nb_decrement),
+                                   NB_SLOT(nb_decrement), "--");
+
+    binary_iop1(v, w, __builtin_offsetof (PyNumberMethods, nb_inplace_add), __builtin_offsetof (PyNumberMethods, nb_add), "+=");
+    
+
+    if (result == Py_NotImplemented) {
+        PySequenceMethods *m = Py_TYPE(v)->tp_as_sequence;
+        Py_DECREF(result);
+        if (m != NULL) {
+            binaryfunc func = m->sq_inplace_concat;
+            if (func == NULL)
+                func = m->sq_concat;
+            if (func != NULL) {
+                result = func(v, w);
+                assert(_Py_CheckSlotResult(v, "+=", result != NULL));
+                return result;
+            }
+        }
+        result = binop_type_error(v, w, "+=");
+    }
+    return result;
+}
+
+
+
+PyObject *
 PyNumber_InPlaceMultiply(PyObject *v, PyObject *w)
 {
     PyObject *result = BINARY_IOP1(v, w, NB_SLOT(nb_inplace_multiply),

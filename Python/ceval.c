@@ -842,6 +842,9 @@ static const binaryfunc binary_ops[] = {
     [NB_INPLACE_SUBTRACT] = PyNumber_InPlaceSubtract,
     [NB_INPLACE_TRUE_DIVIDE] = PyNumber_InPlaceTrueDivide,
     [NB_INPLACE_XOR] = PyNumber_InPlaceXor,
+    //new stuff for increment/decrement
+    [NB_INCREMENT] = PyNumber_Increment,
+    [NB_DECREMENT] = PyNumber_Decrement,
 };
 
 

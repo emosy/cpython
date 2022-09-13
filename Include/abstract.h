@@ -627,6 +627,14 @@ PyAPI_FUNC(PyObject *) PyNumber_InPlaceXor(PyObject *o1, PyObject *o2);
    This is the equivalent of the Python expression: o1 |= o2. */
 PyAPI_FUNC(PyObject *) PyNumber_InPlaceOr(PyObject *o1, PyObject *o2);
 
+//new for increment/decrement
+
+
+PyAPI_FUNC(PyObject *) PyNumber_Increment(PyObject *o1, PyObject *o2);
+
+PyAPI_FUNC(PyObject *) PyNumber_Decrement(PyObject *o1, PyObject *o2);
+
+
 /* Returns the integer n converted to a string with a base, with a base
    marker of 0b, 0o or 0x prefixed if applicable.
 
