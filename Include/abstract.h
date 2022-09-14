@@ -640,9 +640,9 @@ PyAPI_FUNC(PyObject *) PyNumber_InPlaceOr(PyObject *o1, PyObject *o2);
 //new for increment/decrement
 
 
-PyAPI_FUNC(PyObject *) PyNumber_Increment(PyObject *o1, PyObject *o2);
+PyAPI_FUNC(PyObject *) PyNumber_Increment(PyObject *o1);
 
-PyAPI_FUNC(PyObject *) PyNumber_Decrement(PyObject *o1, PyObject *o2);
+PyAPI_FUNC(PyObject *) PyNumber_Decrement(PyObject *o1);
 
 
 /* Returns the integer n converted to a string with a base, with a base

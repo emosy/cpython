@@ -1271,60 +1271,160 @@ PyNumber_InPlaceAdd(PyObject *v, PyObject *w)
     return result;
 }
 
+// copied from PyNumber_Negative (since it's unary)
 PyObject *
-PyNumber_Increment(PyObject *v, PyObject *w)
+PyNumber_Increment(PyObject *o)
 {
-    PyObject *result = BINARY_IOP1(v, w, NB_SLOT(nb_increment),
-                                   NB_SLOT(nb_increment), "++");
 
-    binary_iop1(v, w, __builtin_offsetof (PyNumberMethods, nb_inplace_add), __builtin_offsetof (PyNumberMethods, nb_add), "+=");
-
-
-    if (result == Py_NotImplemented) {
-        PySequenceMethods *m = Py_TYPE(v)->tp_as_sequence;
-        Py_DECREF(result);
-        if (m != NULL) {
-            binaryfunc func = m->sq_inplace_concat;
-            if (func == NULL)
-                func = m->sq_concat;
-            if (func != NULL) {
-                result = func(v, w);
-                assert(_Py_CheckSlotResult(v, "+=", result != NULL));
-                return result;
-            }
-        }
-        result = binop_type_error(v, w, "+=");
+    if (o == NULL) {
+        return null_error();
     }
-    return result;
+    // TODO: create new python object that represents a constant 1?
+
+    PyNumberMethods *num = Py_TYPE(o)->tp_as_number;
+
+    if (num && num->nb_increment) {
+        PyObject *result = num->nb_increment(o);
+        assert(_Py_CheckSlotResult(o, "++", result != NULL));
+        return result;
+    }
+
+    // PyObject *result = BINARY_IOP1(v, w, NB_SLOT(nb_increment),
+    //                                NB_SLOT(nb_increment), "++");
+
+    // binary_iop1(v, w, __builtin_offsetof (PyNumberMethods, nb_inplace_add), __builtin_offsetof (PyNumberMethods, nb_add), "+=");
+
+
+    /* explained: PyNumberMethods
+
+    the Include/cpython/object.h file has a struct for numbers
+    where it has all the "slot functions" which are the functions that actually do the calculations
+
+    the struct is called PyNumberMethods
+    
+    e.g. you somehow get a PyNumberMethods (see PyNumber_Negative for an example)
+    assume you have this:
+    PyNumberMethods *m = ...;
+    then do this:
+    PyObject *result = (*m->nb_increment)(o);
+
+    this will use the nb_increment method and call it on o then return it
+
+    for now, i will have it do nb_inplace_add with 1 (if i can figure out how to get a literal 1)
+
+    */
+
+
+
+    // if (result == Py_NotImplemented) {
+    //     PySequenceMethods *m = Py_TYPE(v)->tp_as_sequence;
+    //     Py_DECREF(result);
+    //     if (m != NULL) {
+    //         binaryfunc func = m->sq_inplace_concat;
+    //         if (func == NULL)
+    //             func = m->sq_concat;
+    //         if (func != NULL) {
+    //             result = func(v, w);
+    //             assert(_Py_CheckSlotResult(v, "+=", result != NULL));
+    //             return result;
+    //         }
+    //     }
+    //     result = binop_type_error(v, w, "+=");
+    // }
+    // return result;
+    return type_error("bad operand type for unary ++: '%.200s'", o);
 }
 
 
 PyObject *
-PyNumber_Decrement(PyObject *v, PyObject *w)
+PyNumber_Decrement(PyObject *o)
 {
-    PyObject *result = BINARY_IOP1(v, w, NB_SLOT(nb_decrement),
-                                   NB_SLOT(nb_decrement), "--");
 
-    binary_iop1(v, w, __builtin_offsetof (PyNumberMethods, nb_inplace_add), __builtin_offsetof (PyNumberMethods, nb_add), "+=");
+    if (o == NULL) {
+        return null_error();
+    }
+    // TODO: create new python object that represents a constant 1?
+
+    PyNumberMethods *num = Py_TYPE(o)->tp_as_number;
+
+    if (num && num->nb_decrement) {
+        PyObject *result = num->nb_decrement(o);
+        assert(_Py_CheckSlotResult(o, "++", result != NULL));
+        return result;
+    }
+
+    // PyObject *result = BINARY_IOP1(v, w, NB_SLOT(nb_increment),
+    //                                NB_SLOT(nb_increment), "++");
+
+    // binary_iop1(v, w, __builtin_offsetof (PyNumberMethods, nb_inplace_add), __builtin_offsetof (PyNumberMethods, nb_add), "+=");
+
+
+    /* explained: PyNumberMethods
+
+    the Include/cpython/object.h file has a struct for numbers
+    where it has all the "slot functions" which are the functions that actually do the calculations
+
+    the struct is called PyNumberMethods
+    
+    e.g. you somehow get a PyNumberMethods (see PyNumber_Negative for an example)
+    assume you have this:
+    PyNumberMethods *m = ...;
+    then do this:
+    PyObject *result = (*m->nb_increment)(o);
+
+    this will use the nb_increment method and call it on o then return it
+
+    for now, i will have it do nb_inplace_add with 1 (if i can figure out how to get a literal 1)
+
+    */
+
+
+
+    // if (result == Py_NotImplemented) {
+    //     PySequenceMethods *m = Py_TYPE(v)->tp_as_sequence;
+    //     Py_DECREF(result);
+    //     if (m != NULL) {
+    //         binaryfunc func = m->sq_inplace_concat;
+    //         if (func == NULL)
+    //             func = m->sq_concat;
+    //         if (func != NULL) {
+    //             result = func(v, w);
+    //             assert(_Py_CheckSlotResult(v, "+=", result != NULL));
+    //             return result;
+    //         }
+    //     }
+    //     result = binop_type_error(v, w, "+=");
+    // }
+    // return result;
+    return type_error("bad operand type for unary --: '%.200s'", o);
+}
+
+// PyObject *
+// PyNumber_Decrement(PyObject *v, PyObject *w)
+// {
+//     PyObject *result = BINARY_IOP1(v, w, NB_SLOT(nb_decrement),
+//                                    NB_SLOT(nb_decrement), "--");
+
+//     binary_iop1(v, w, __builtin_offsetof (PyNumberMethods, nb_inplace_add), __builtin_offsetof (PyNumberMethods, nb_add), "+=");
     
 
-    if (result == Py_NotImplemented) {
-        PySequenceMethods *m = Py_TYPE(v)->tp_as_sequence;
-        Py_DECREF(result);
-        if (m != NULL) {
-            binaryfunc func = m->sq_inplace_concat;
-            if (func == NULL)
-                func = m->sq_concat;
-            if (func != NULL) {
-                result = func(v, w);
-                assert(_Py_CheckSlotResult(v, "+=", result != NULL));
-                return result;
-            }
-        }
-        result = binop_type_error(v, w, "+=");
-    }
-    return result;
-}
+//     if (result == Py_NotImplemented) {
+//         PySequenceMethods *m = Py_TYPE(v)->tp_as_sequence;
+//         Py_DECREF(result);
+//         if (m != NULL) {
+//             binaryfunc func = m->sq_inplace_concat;
+//             if (func == NULL)
+//                 func = m->sq_concat;
+//             if (func != NULL) {
+//                 result = func(v, w);
+//                 assert(_Py_CheckSlotResult(v, "+=", result != NULL));
+//                 return result;
+//             }
+//         }
+//         result = binop_type_error(v, w, "+=");
+//     }
+//     return result;
+// }
 
 
 
