@@ -153,7 +153,6 @@ Python/frozen_modules/MANIFEST
 /python
 !/Python/
 
-
-git config --global core.autocrlf input
+.cache
 # main branch only: ABI files are not checked/maintained
 Doc/data/python*.abi
