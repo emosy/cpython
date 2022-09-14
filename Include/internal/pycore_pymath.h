@@ -8,15 +8,6 @@ extern "C" {
 #  error "this header requires Py_BUILD_CORE define"
 #endif
 
-// Extra declarations
-#if !defined(_MSC_VER) && !defined(__STDC__)
-extern double fmod (double, double);
-extern double frexp (double, int *);
-extern double ldexp (double, int);
-extern double modf (double, double *);
-extern double pow(double, double);
-#endif  // !defined(_MSC_VER) && !defined(__STDC__)
-
 
 /* _Py_ADJUST_ERANGE1(x)
  * _Py_ADJUST_ERANGE2(x, y)
@@ -65,17 +56,13 @@ static inline void _Py_ADJUST_ERANGE2(double x, double y)
     }
 }
 
-// Return whether integral type *type* is signed or not.
-#define _Py_IntegralTypeSigned(type) \
-    ((type)(-1) < 0)
-
 // Return the maximum value of integral type *type*.
 #define _Py_IntegralTypeMax(type) \
-    ((_Py_IntegralTypeSigned(type)) ? (((((type)1 << (sizeof(type)*CHAR_BIT - 2)) - 1) << 1) + 1) : ~(type)0)
+    (_Py_IS_TYPE_SIGNED(type) ? (((((type)1 << (sizeof(type)*CHAR_BIT - 2)) - 1) << 1) + 1) : ~(type)0)
 
 // Return the minimum value of integral type *type*.
 #define _Py_IntegralTypeMin(type) \
-    ((_Py_IntegralTypeSigned(type)) ? -_Py_IntegralTypeMax(type) - 1 : 0)
+    (_Py_IS_TYPE_SIGNED(type) ? -_Py_IntegralTypeMax(type) - 1 : 0)
 
 // Check whether *v* is in the range of integral type *type*. This is most
 // useful if *v* is floating-point, since demoting a floating-point *v* to an

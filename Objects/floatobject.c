@@ -71,7 +71,7 @@ static PyStructSequence_Field floatinfo_fields[] = {
     {"min_exp",         "DBL_MIN_EXP -- minimum int e such that radix**(e-1) "
                     "is a normalized float"},
     {"min_10_exp",      "DBL_MIN_10_EXP -- minimum int e such that 10**e is "
-                    "a normalized"},
+                    "a normalized float"},
     {"dig",             "DBL_DIG -- maximum number of decimal digits that "
                     "can be faithfully represented in a float"},
     {"mant_dig",        "DBL_MANT_DIG -- mantissa digits"},
@@ -141,6 +141,7 @@ PyFloat_FromDouble(double fval)
 #endif
         state->free_list = (PyFloatObject *) Py_TYPE(op);
         state->numfree--;
+        OBJECT_STAT_INC(from_freelist);
     }
     else
 #endif
@@ -161,11 +162,18 @@ float_from_string_inner(const char *s, Py_ssize_t len, void *obj)
     double x;
     const char *end;
     const char *last = s + len;
-    /* strip space */
+    /* strip leading whitespace */
     while (s < last && Py_ISSPACE(*s)) {
         s++;
     }
+    if (s == last) {
+        PyErr_Format(PyExc_ValueError,
+                     "could not convert string to float: "
+                     "%R", obj);
+        return NULL;
+    }
 
+    /* strip trailing whitespace */
     while (s < last - 1 && Py_ISSPACE(last[-1])) {
         last--;
     }
@@ -238,28 +246,42 @@ PyFloat_FromString(PyObject *v)
     return result;
 }
 
-static void
-float_dealloc(PyFloatObject *op)
+void
+_PyFloat_ExactDealloc(PyObject *obj)
 {
+    assert(PyFloat_CheckExact(obj));
+    PyFloatObject *op = (PyFloatObject *)obj;
+#if PyFloat_MAXFREELIST > 0
+    struct _Py_float_state *state = get_float_state();
+#ifdef Py_DEBUG
+    // float_dealloc() must not be called after _PyFloat_Fini()
+    assert(state->numfree != -1);
+#endif
+    if (state->numfree >= PyFloat_MAXFREELIST)  {
+        PyObject_Free(op);
+        return;
+    }
+    state->numfree++;
+    Py_SET_TYPE(op, (PyTypeObject *)state->free_list);
+    state->free_list = op;
+    OBJECT_STAT_INC(to_freelist);
+#else
+    PyObject_Free(op);
+#endif
+}
+
+static void
+float_dealloc(PyObject *op)
+{
+    assert(PyFloat_Check(op));
 #if PyFloat_MAXFREELIST > 0
     if (PyFloat_CheckExact(op)) {
-        struct _Py_float_state *state = get_float_state();
-#ifdef Py_DEBUG
-        // float_dealloc() must not be called after _PyFloat_Fini()
-        assert(state->numfree != -1);
-#endif
-        if (state->numfree >= PyFloat_MAXFREELIST)  {
-            PyObject_Free(op);
-            return;
-        }
-        state->numfree++;
-        Py_SET_TYPE(op, (PyTypeObject *)state->free_list);
-        state->free_list = op;
+        _PyFloat_ExactDealloc(op);
     }
     else
 #endif
     {
-        Py_TYPE(op)->tp_free((PyObject *)op);
+        Py_TYPE(op)->tp_free(op);
     }
 }
 
@@ -1708,7 +1730,6 @@ typedef enum {
 } float_format_type;
 
 static float_format_type double_format, float_format;
-static float_format_type detected_double_format, detected_float_format;
 
 /*[clinic input]
 @classmethod
@@ -1760,78 +1781,6 @@ float___getformat___impl(PyTypeObject *type, const char *typestr)
     }
 }
 
-/*[clinic input]
-@classmethod
-float.__setformat__
-
-    typestr: str
-        Must be 'double' or 'float'.
-    fmt: str
-        Must be one of 'unknown', 'IEEE, big-endian' or 'IEEE, little-endian',
-        and in addition can only be one of the latter two if it appears to
-        match the underlying C reality.
-    /
-
-You probably don't want to use this function.
-
-It exists mainly to be used in Python's test suite.
-
-Override the automatic determination of C-level floating point type.
-This affects how floats are converted to and from binary strings.
-[clinic start generated code]*/
-
-static PyObject *
-float___setformat___impl(PyTypeObject *type, const char *typestr,
-                         const char *fmt)
-/*[clinic end generated code: output=06864de1fb5f1f04 input=c0e9e04dd87f9988]*/
-{
-    float_format_type f;
-    float_format_type detected;
-    float_format_type *p;
-
-    if (strcmp(typestr, "double") == 0) {
-        p = &double_format;
-        detected = detected_double_format;
-    }
-    else if (strcmp(typestr, "float") == 0) {
-        p = &float_format;
-        detected = detected_float_format;
-    }
-    else {
-        PyErr_SetString(PyExc_ValueError,
-                        "__setformat__() argument 1 must "
-                        "be 'double' or 'float'");
-        return NULL;
-    }
-
-    if (strcmp(fmt, "unknown") == 0) {
-        f = unknown_format;
-    }
-    else if (strcmp(fmt, "IEEE, little-endian") == 0) {
-        f = ieee_little_endian_format;
-    }
-    else if (strcmp(fmt, "IEEE, big-endian") == 0) {
-        f = ieee_big_endian_format;
-    }
-    else {
-        PyErr_SetString(PyExc_ValueError,
-                        "__setformat__() argument 2 must be "
-                        "'unknown', 'IEEE, little-endian' or "
-                        "'IEEE, big-endian'");
-        return NULL;
-
-    }
-
-    if (f != unknown_format && f != detected) {
-        PyErr_Format(PyExc_ValueError,
-                     "can only set %s format to 'unknown' or the "
-                     "detected platform value", typestr);
-        return NULL;
-    }
-
-    *p = f;
-    Py_RETURN_NONE;
-}
 
 static PyObject *
 float_getreal(PyObject *v, void *closure)
@@ -1885,7 +1834,6 @@ static PyMethodDef float_methods[] = {
     FLOAT_IS_INTEGER_METHODDEF
     FLOAT___GETNEWARGS___METHODDEF
     FLOAT___GETFORMAT___METHODDEF
-    FLOAT___SETFORMAT___METHODDEF
     FLOAT___FORMAT___METHODDEF
     {NULL,              NULL}           /* sentinel */
 };
@@ -1989,6 +1937,8 @@ _PyFloat_InitState(PyInterpreterState *interp)
         return;
     }
 
+    float_format_type detected_double_format, detected_float_format;
+
     /* We attempt to determine if this machine is using IEEE
        floating point formats by peering at the bits of some
        carefully chosen values.  If it looks like we are on an
@@ -2049,7 +1999,8 @@ _PyFloat_InitTypes(PyInterpreterState *interp)
 
     /* Init float info */
     if (FloatInfoType.tp_name == NULL) {
-        if (PyStructSequence_InitType2(&FloatInfoType, &floatinfo_desc) < 0) {
+        if (_PyStructSequence_InitBuiltin(&FloatInfoType,
+                                          &floatinfo_desc) < 0) {
             return _PyStatus_ERR("can't init float info type");
         }
     }
@@ -2105,7 +2056,7 @@ _PyFloat_DebugMallocStats(FILE *out)
 
 
 /*----------------------------------------------------------------------------
- * _PyFloat_{Pack,Unpack}{2,4,8}.  See floatobject.h.
+ * PyFloat_{Pack,Unpack}{2,4,8}.  See floatobject.h.
  * To match the NPY_HALF_ROUND_TIES_TO_EVEN behavior in:
  * https://github.com/numpy/numpy/blob/master/numpy/core/src/npymath/halffloat.c
  * We use:
@@ -2116,8 +2067,9 @@ _PyFloat_DebugMallocStats(FILE *out)
  */
 
 int
-_PyFloat_Pack2(double x, unsigned char *p, int le)
+PyFloat_Pack2(double x, char *data, int le)
 {
+    unsigned char *p = (unsigned char *)data;
     unsigned char sign;
     int e;
     double f;
@@ -2220,8 +2172,9 @@ _PyFloat_Pack2(double x, unsigned char *p, int le)
 }
 
 int
-_PyFloat_Pack4(double x, unsigned char *p, int le)
+PyFloat_Pack4(double x, char *data, int le)
 {
+    unsigned char *p = (unsigned char *)data;
     if (float_format == unknown_format) {
         unsigned char sign;
         int e;
@@ -2327,8 +2280,9 @@ _PyFloat_Pack4(double x, unsigned char *p, int le)
 }
 
 int
-_PyFloat_Pack8(double x, unsigned char *p, int le)
+PyFloat_Pack8(double x, char *data, int le)
 {
+    unsigned char *p = (unsigned char *)data;
     if (double_format == unknown_format) {
         unsigned char sign;
         int e;
@@ -2456,8 +2410,9 @@ _PyFloat_Pack8(double x, unsigned char *p, int le)
 }
 
 double
-_PyFloat_Unpack2(const unsigned char *p, int le)
+PyFloat_Unpack2(const char *data, int le)
 {
+    unsigned char *p = (unsigned char *)data;
     unsigned char sign;
     int e;
     unsigned int f;
@@ -2518,8 +2473,9 @@ _PyFloat_Unpack2(const unsigned char *p, int le)
 }
 
 double
-_PyFloat_Unpack4(const unsigned char *p, int le)
+PyFloat_Unpack4(const char *data, int le)
 {
+    unsigned char *p = (unsigned char *)data;
     if (float_format == unknown_format) {
         unsigned char sign;
         int e;
@@ -2596,8 +2552,9 @@ _PyFloat_Unpack4(const unsigned char *p, int le)
 }
 
 double
-_PyFloat_Unpack8(const unsigned char *p, int le)
+PyFloat_Unpack8(const char *data, int le)
 {
+    unsigned char *p = (unsigned char *)data;
     if (double_format == unknown_format) {
         unsigned char sign;
         int e;
